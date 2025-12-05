@@ -3,13 +3,14 @@ using UnityEngine.SceneManagement;
 
 public class MainMenuManager : MonoBehaviour
 {
+    public SettingsManager settingsManager;
     public void StartGame()
     {
         SceneManager.LoadScene("GamePlay");
     }
     public void OpenSettings()
     {
-        Debug.Log("Settings opened");
+        settingsManager.OpenSettings();
     }
     public void QuitGame()
     {
