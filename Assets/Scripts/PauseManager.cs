@@ -3,7 +3,9 @@ using UnityEngine.SceneManagement;
 public class PauseManager : MonoBehaviour
 {
     public GameObject pausePanel;
+    public GameObject settingsPanel;
     private bool isPaused = false;
+
 
     void Start()
     {
@@ -41,8 +43,16 @@ public class PauseManager : MonoBehaviour
     }
     public void OpenSettings()
     {
-        Debug.Log("Settings açýlacak");
+        pausePanel.SetActive(false);
+        settingsPanel.SetActive(true);
+        Debug.Log("ayarlarrr");
     }
+    public void CloseSettings()
+    {
+        pausePanel.SetActive(true);
+        settingsPanel.SetActive(false);
+    }
+
     public void LoadMainMenu()
     {
         Time.timeScale = 1f;
