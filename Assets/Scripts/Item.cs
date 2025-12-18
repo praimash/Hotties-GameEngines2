@@ -2,25 +2,19 @@ using UnityEngine;
 
 public class Item : MonoBehaviour
 {
-    public string itemName; // Buraya Inspector'dan isim yazacaðýz
+    public string itemName; // Eþyanýn adý (Anahtar, Fener vs.)
+    public Sprite icon;     // Envanterde gözükecek resim
 
     public void Interact()
     {
         Debug.Log(itemName + " alýndý!");
 
-        // --- DEÐÝÞEN KISIM BURASI ---
-        // Eðer bu eþyanýn adý "El Feneri" ise Player'daki feneri aktifleþtir
-        if (itemName == "El Feneri")
-        {
-            // Player'ý bul, içindeki FlashlightController'ý bul ve feneri aç
-            FlashlightController controller = FindFirstObjectByType<FlashlightController>();
-            if (controller != null)
-            {
-                controller.EnableFlashlightInHand();
-            }
-        }
-        // ---------------------------
+        // Envanter Yöneticisine kendini gönder
+        InventoryManager.Instance.AddItem(this);
 
-        Destroy(gameObject); // Yerdekini yok et
+        // Sahneden yok et (Ama script verisi Manager'da kopyalandý)
+        // Not: Burada sadece görseli kapatýyoruz ki veri kaybolmasýn.
+        gameObject.SetActive(false);
+        transform.SetParent(InventoryManager.Instance.transform); // Çöp olmasýn diye Inventory'nin altýna taþý
     }
 }
