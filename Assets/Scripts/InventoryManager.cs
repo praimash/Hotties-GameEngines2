@@ -80,4 +80,17 @@ public class InventoryManager : MonoBehaviour
             newSlot.GetComponent<Image>().sprite = item.icon;
         }
     }
+
+    // Bu fonksiyon envanterde belirli bir isimde eþya var mý diye bakar
+    public bool HasItem(string itemNameToCheck)
+    {
+        foreach (Item item in collectedItems)
+        {
+            if (item.itemName == itemNameToCheck)
+            {
+                return true; // Buldum!
+            }
+        }
+        return false; // Yokmuþ :(
+    }
 }

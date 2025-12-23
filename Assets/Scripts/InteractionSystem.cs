@@ -1,17 +1,16 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public class InteractionSystem : MonoBehaviour
 {
     [Header("Ayarlar")]
-    public float interactionDistance = 3f; // Ne kadar uzaktan alabilirsin
-    public LayerMask interactionLayer; // Sadece 'Interactable' layerını görsün
+    public float interactionDistance = 3f; // Mesafe
+    public LayerMask interactionLayer; // Sadece bu layerdakileri gÃ¶rsÃ¼n
 
     [Header("Referanslar")]
-    public Camera cam; // Kamerayı buraya sürüklemeyi unutma!
+    public Camera cam; // KamerayÄ± sÃ¼rÃ¼kle
 
     void Update()
     {
-        // E tuşuna basınca ışın yolla
         if (Input.GetKeyDown(KeyCode.E))
         {
             ShootRay();
@@ -20,30 +19,61 @@ public class InteractionSystem : MonoBehaviour
 
     void ShootRay()
     {
-        // 1. DEBUG ÇİZGİSİ: E'ye bastığında sahnede (Scene ekranında) kırmızı bir çizgi çıkarır.
-        // Bu çizgi objeye değiyor mu diye kontrol etmeni sağlar.
-        Debug.DrawRay(cam.transform.position, cam.transform.forward * interactionDistance, Color.red, 2f);
-
-        // Ekranın tam ortasından hayali bir ışın (Ray) oluştur
         Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
         RaycastHit hit;
 
-        // Işın belirlediğimiz mesafede ve layerda bir şeye çarptı mı?
+        // --- HATA AYIKLAMA (RÃ–NTGEN) ---
+        // IÅŸÄ±n neye Ã§arpÄ±yor gÃ¶relim. 
+        if (Physics.Raycast(ray, out RaycastHit debugHit, interactionDistance))
+        {
+            // EÄŸer kendi Player layerÄ±na Ã§arpÄ±yorsa konsola uyarÄ± basar
+            if (debugHit.collider.gameObject.layer == LayerMask.NameToLayer("Player"))
+            {
+                Debug.LogWarning("âš ï¸ DÄ°KKAT: Kendi vÃ¼cuduna (Player) Ã§arpÄ±yorsun! Interaction System ayarlarÄ±ndan Player layerÄ±nÄ± kapat.");
+            }
+            else
+            {
+                Debug.Log("ğŸ” BAKTIÄIN ÅEY: " + debugHit.collider.name);
+            }
+        }
+        // --------------------------------
+
+        Debug.DrawRay(cam.transform.position, cam.transform.forward * interactionDistance, Color.red, 2f);
+
+        // --- GERÃ‡EK ETKÄ°LEÅÄ°M ---
+        // LayerMask kullanarak Ä±ÅŸÄ±n atÄ±yoruz. BÃ¶ylece "Default" veya "Player" layerlarÄ±nÄ± gÃ¶rmezden gelebiliriz.
         if (Physics.Raycast(ray, out hit, interactionDistance, interactionLayer))
         {
-            // --- A: Bu bir normal eşya mı? (El Feneri vs.) ---
+            // 1. Ä°ncelemelik EÅŸya mÄ±? (Inspectable)
+            InspectableItem inspectItem = hit.collider.GetComponent<InspectableItem>();
+            if (inspectItem != null)
+            {
+                inspectItem.Interact();
+                return;
+            }
+
+            // 2. Normal EÅŸya mÄ±? (Item)
             Item item = hit.collider.GetComponent<Item>();
             if (item != null)
             {
                 item.Interact();
-                return; // Bulduysan işlemi bitir
+                return;
             }
 
-            // --- B: Bu bir kilitli dolap mı? ---
+            // 3. Kilitli Dolap mÄ±? (LockedItem)
             LockedItem lockedItem = hit.collider.GetComponent<LockedItem>();
             if (lockedItem != null)
             {
                 lockedItem.Interact();
+                return;
+            }
+
+            // 4. Kilitli KapÄ± mÄ±? (LockedDoor)
+            LockedDoor door = hit.collider.GetComponent<LockedDoor>();
+            if (door != null)
+            {
+                door.Interact();
+                return;
             }
         }
     }
