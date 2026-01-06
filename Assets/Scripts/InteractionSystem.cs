@@ -75,6 +75,22 @@ public class InteractionSystem : MonoBehaviour
                 door.Interact();
                 return;
             }
+
+            // 5. Şifreli Obje mi? (PasswordObject) --- [YENİ EKLENEN KISIM] ---
+            PasswordObject passObj = hit.collider.GetComponent<PasswordObject>();
+            if (passObj != null)
+            {
+                Debug.Log("Sistem: Şifreli objeye tıkladın!"); // Kontrol için log
+                passObj.Interact();
+                return;
+            }
+            // 6. Saklanma Noktası mı? (YENİ)
+            HidingSpot spot = hit.collider.GetComponent<HidingSpot>();
+            if (spot != null)
+            {
+                spot.Interact();
+                return;
+            }
         }
     }
 }
