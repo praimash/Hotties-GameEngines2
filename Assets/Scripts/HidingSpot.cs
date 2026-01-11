@@ -1,23 +1,25 @@
 using UnityEngine;
+using System.Collections;
 
 public class HidingSpot : MonoBehaviour
 {
     [Header("Ayarlar")]
-    public Transform exitPoint; // Dolaptan çýkýnca nerede doðalým?
-    public GameObject playerMesh; // Oyuncunun vücudu (gizlemek için)
-    public KeyCode exitKey = KeyCode.E; // Hangi tuþla çýkýlsýn?
+    public Transform exitPoint;
+    public KeyCode exitKey = KeyCode.E;
 
     private bool isInside = false;
+    private bool canExit = true; // Hemen çýkmayý önleyen kilit
+
     private GameObject player;
-    private MonoBehaviour playerMovement;
+    private PlayerMovement playerMovement;
     private Collider playerCollider;
 
     void Update()
     {
-        // Eðer içerdeysek, oyuncu nereye bakarsa baksýn E'ye basýnca çýksýn
-        if (isInside && Input.GetKeyDown(exitKey))
+        // Sadece içerideysek, çýkýþ izni varsa ve E'ye basýldýysa
+        if (isInside && canExit && Input.GetKeyDown(exitKey))
         {
-            Interact();
+            ExitHiding();
         }
     }
 
@@ -29,55 +31,50 @@ public class HidingSpot : MonoBehaviour
         {
             HidePlayer();
         }
-        else
-        {
-            ExitHiding();
-        }
     }
 
     void HidePlayer()
     {
         isInside = true;
+        canExit = false; // Kilidi kapat, hemen çýkamasýn
+        PlayerStatus.isHidden = true;
 
-        // PlayerStatus scriptine eriþip gizlendiðimizi söylüyoruz
-        // Eðer PlayerStatus scriptin yoksa bu satýrý silmen gerekebilir ama eklemiþtik.
-        if (PlayerStatus.isHidden == false) PlayerStatus.isHidden = true;
-
-        // Oyuncuyu dolabýn içine al
         if (player != null)
         {
+            // Oyuncuyu dolabýn içine al
             player.transform.position = transform.position;
             player.transform.rotation = transform.rotation;
+
+            // Hareketi ve Fiziði Kapat (PlayerMovement scriptini bulup kapatýyoruz)
+            if (playerMovement != null) playerMovement.enabled = false;
+            if (playerCollider != null) playerCollider.enabled = false;
         }
 
-        // Fiziði ve Hareketi Kapat
-        if (playerMovement != null) playerMovement.enabled = false;
-        if (playerCollider != null) playerCollider.enabled = false;
+        // 1 Saniye sonra çýkýþa izin ver (Girdi-Çýktý bugýný önler)
+        StartCoroutine(EnableExitCooldown());
 
-        Debug.Log("Dolaba saklandýn! (Çýkmak için E'ye bas)");
+        Debug.Log("Dolaba girdin.");
     }
 
     void ExitHiding()
     {
         isInside = false;
-        PlayerStatus.isHidden = false; // ARTIK GÝZLÝ DEÐÝLÝZ!
+        PlayerStatus.isHidden = false;
 
-        // Çýkýþ noktasýna ýþýnla
         if (exitPoint != null && player != null)
-        {
             player.transform.position = exitPoint.position;
-        }
-        else if (player != null)
-        {
-            // Eðer çýkýþ noktasý koymayý unuttuysan dolabýn biraz önüne atalým
-            player.transform.position = transform.position + transform.forward * 1.5f;
-        }
 
-        // Fiziði ve Hareketi Aç
+        // Hareketi Geri Aç
         if (playerMovement != null) playerMovement.enabled = true;
         if (playerCollider != null) playerCollider.enabled = true;
 
         Debug.Log("Dolaptan çýktýn.");
+    }
+
+    IEnumerator EnableExitCooldown()
+    {
+        yield return new WaitForSeconds(0.5f); // Yarým saniye bekle
+        canExit = true;
     }
 
     void FindPlayer()
@@ -87,8 +84,6 @@ public class HidingSpot : MonoBehaviour
         {
             player = pObj;
             playerMovement = player.GetComponent<PlayerMovement>();
-            // HATALI OLAN FirstPersonController SATIRINI SÝLDÝM.
-
             playerCollider = player.GetComponent<Collider>();
         }
     }

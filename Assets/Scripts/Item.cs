@@ -2,19 +2,27 @@ using UnityEngine;
 
 public class Item : MonoBehaviour
 {
-    public string itemName; // Eþyanýn adý (Anahtar, Fener vs.)
-    public Sprite icon;     // Envanterde gözükecek resim
+    public string itemName;
+    public Sprite icon;
 
-    public void Interact()
+    // 'virtual' yazdýk ki Fener bunu deðiþtirip kendine özellik ekleyebilsin
+    public virtual void Interact()
     {
         Debug.Log(itemName + " alýndý!");
 
-        // Envanter Yöneticisine kendini gönder
-        InventoryManager.Instance.AddItem(this);
+        // Envanter sistemin varsa oraya gönderir
+        if (InventoryManager.Instance != null)
+        {
+            InventoryManager.Instance.AddItem(this);
 
-        // Sahneden yok et (Ama script verisi Manager'da kopyalandý)
-        // Not: Burada sadece görseli kapatýyoruz ki veri kaybolmasýn.
-        gameObject.SetActive(false);
-        transform.SetParent(InventoryManager.Instance.transform); // Çöp olmasýn diye Inventory'nin altýna taþý
+            // Görseli kapatýp Inventory'nin içine taþýyoruz
+            gameObject.SetActive(false);
+            transform.SetParent(InventoryManager.Instance.transform);
+        }
+        else
+        {
+            Debug.LogWarning("InventoryManager bulunamadý! Eþya sadece yok edildi.");
+            Destroy(gameObject);
+        }
     }
 }

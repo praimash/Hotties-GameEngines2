@@ -2,34 +2,37 @@ using UnityEngine;
 
 public class FlashlightController : MonoBehaviour
 {
-    public GameObject flashlightHandObject; // Elindeki fener objesi (Light componentli olan)
-    public bool hasFlashlight = false; // Envanterde var mý?
-    public bool isLightOn = false; // Iþýk açýk mý?
+    [Header("Ayarlar")]
+    public GameObject flashlightHandObject; // Kameranýn içindeki Iþýk objesi
+    public bool hasFlashlight = false;      // Envanterde var mý?
+    public bool isLightOn = false;          // Þu an açýk mý?
+
+    void Start()
+    {
+        // Oyun baþýnda eldeki ýþýðý kapat
+        if (flashlightHandObject != null) flashlightHandObject.SetActive(false);
+    }
 
     void Update()
     {
-        // Fenerimiz varsa ve F'ye basarsak aç/kapa
+        // Fener varsa ve F'ye basýlýrsa
         if (hasFlashlight && Input.GetKeyDown(KeyCode.F))
         {
             ToggleLight();
         }
     }
 
-    // Yerdeki feneri alýnca bu çalýþacak
+    // Yerdeki fener alýnýnca bu çalýþýr
     public void EnableFlashlightInHand()
     {
         hasFlashlight = true;
-        // Ýstersen alýnca otomatik açýlýr, istersen kapalý gelir.
-        // Biz sadece 'var' olduðunu kaydedelim.
-        Debug.Log("El feneri envantere eklendi! F ile açabilirsin.");
+        Debug.Log("El feneri özelliði açýldý!");
     }
 
     void ToggleLight()
     {
         isLightOn = !isLightOn;
-        flashlightHandObject.SetActive(isLightOn); // Objeyi (ve ýþýðýný) aç/kapa
-
-        // Buraya "klik" sesi de ekleyebilirsin:
-        // GetComponent<AudioSource>().Play();
+        if (flashlightHandObject != null)
+            flashlightHandObject.SetActive(isLightOn);
     }
 }

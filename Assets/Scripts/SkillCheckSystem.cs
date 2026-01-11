@@ -3,26 +3,34 @@ using UnityEngine.UI;
 
 public class SkillCheckSystem : MonoBehaviour
 {
-    [Header("Ayarlar")]
+    [Header("UI Referansları")]
+    public GameObject minigamePanel; // Panel
     public RectTransform pointerRect;
     public RectTransform zoneRect;
+
+    [Header("Ayarlar")]
     public float rotationSpeed = 200f;
     public int targetSuccessCount = 3;
 
-    [Header("KALİBRASYON (Burası Önemli)")]
-    public float visualOffset = 0f; // Buraya konsoldaki sayıyı yazacağız
+    [Tooltip("Merkezden kaç derece sağa/sola sapmaya izin var? (Örn: 15)")]
+    public float hitTolerance = 15f; // <--- YENİ AYAR BURADA (15 SAĞ, 15 SOL)
+
+    [Header("KALİBRASYON")]
+    public float visualOffset = 0f;
 
     private int currentSuccess = 0;
     private bool isGameActive = false;
     private System.Action onUnlockSuccess;
 
-    // Referanslar (Otomatik Bulunur)
     private MonoBehaviour playerMovement;
     private MonoBehaviour interactionSystem;
 
     void Start()
     {
-        gameObject.SetActive(false); // Başlangıçta gizle
+        if (minigamePanel != null)
+        {
+            minigamePanel.SetActive(false);
+        }
     }
 
     void Update()
@@ -42,26 +50,20 @@ public class SkillCheckSystem : MonoBehaviour
 
     void CheckZoneHit()
     {
-        // Matematiksel Hesaplama
         float hitAngle = pointerRect.localEulerAngles.z;
         float targetAngle = zoneRect.localEulerAngles.z;
 
-        // Asıl farkı bul (Offset dahil edilmemiş hali)
         float rawDifference = Mathf.DeltaAngle(hitAngle, targetAngle);
-
-        // Offset dahil hesaplama (Oyunun kararı)
         float differenceWithOffset = Mathf.DeltaAngle(hitAngle, targetAngle + visualOffset);
-        float tolerance = 25f; // Hata payı (Dilim genişliği)
 
         Debug.Log("--------------------------------------------------");
         Debug.Log($"🎯 VURUŞ RAPORU:");
-        Debug.Log($"Senin Bastığın Yer (İbre): {hitAngle:F1}");
-        Debug.Log($"Beyaz Alanın Yeri (Zone): {targetAngle:F1}");
-        Debug.Log($"⚠️ ARADAKİ FARK: {rawDifference:F1}");
-        Debug.Log($"👉 ÇÖZÜM: 'Visual Offset' kutusuna tam olarak {rawDifference:F1} (veya tam tersi) yazmalısın.");
+        Debug.Log($"Fark (Offset Hariç): {rawDifference:F1}");
+        Debug.Log($"👉 ÇÖZÜM: 'Visual Offset' kutusuna {rawDifference:F1} yaz.");
         Debug.Log("--------------------------------------------------");
 
-        if (Mathf.Abs(differenceWithOffset) < tolerance)
+        // Mathf.Abs kullandığımız için hem sağa (+15) hem sola (-15) kabul eder.
+        if (Mathf.Abs(differenceWithOffset) <= hitTolerance)
         {
             Success();
         }
@@ -89,7 +91,7 @@ public class SkillCheckSystem : MonoBehaviour
 
     void Fail()
     {
-        Debug.Log("❌ BAŞARISIZ! (Ayar yapman lazım, konsola bak)");
+        Debug.Log("❌ BAŞARISIZ! (Kalibrasyon yap veya zamanlamayı tutturamadın)");
         CloseMinigame();
     }
 
@@ -111,8 +113,8 @@ public class SkillCheckSystem : MonoBehaviour
 
     public void StartMinigame(System.Action onSuccess)
     {
-        Debug.Log("Oyun Başladı!");
-        gameObject.SetActive(true);
+        if (minigamePanel != null) minigamePanel.SetActive(true);
+
         onUnlockSuccess = onSuccess;
 
         playerMovement = FindFirstObjectByType<PlayerMovement>();
@@ -130,7 +132,8 @@ public class SkillCheckSystem : MonoBehaviour
     void CloseMinigame()
     {
         isGameActive = false;
-        gameObject.SetActive(false);
+        if (minigamePanel != null) minigamePanel.SetActive(false);
+
         if (playerMovement != null) playerMovement.enabled = true;
         if (interactionSystem != null) interactionSystem.enabled = true;
     }

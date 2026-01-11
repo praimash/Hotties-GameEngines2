@@ -1,96 +1,108 @@
 using UnityEngine;
-using UnityEngine.UI;
-using System.Collections;
 
 public class InspectSystem : MonoBehaviour
 {
     [Header("Ayarlar")]
-    public Transform inspectPoint;   // Objenin duracaðý yer (Kamera önü)
-    public float rotateSpeed = 5f;   // Dönme hýzý
-    public GameObject glitchPanel;   // Korku efekti paneli
+    public Transform inspectPoint; // Kameranýn içindeki o X=0, Y=0, Z=0.5 olan nokta
+    public float rotateSpeed = 200f; // Hýzý biraz düþürdüm, daha kontrollü olsun
 
-    [Header("Player Referanslarý")]
-    public MonoBehaviour playerMovement; // Hareket scriptin
-    public MonoBehaviour mouseLook;      // Kamera döndürme scriptin (Genelde MouseLook veya CameraController)
-
-    private GameObject currentObject; // Þu an incelediðimiz kopya obje
+    private GameObject currentItem;
+    private Vector3 originalPos;
+    private Quaternion originalRot;
     private bool isInspecting = false;
+
+    // Fiziði yönetmek için
+    private Rigidbody itemRb;
+    private bool wasKinematic; // Eþyanýn fiziði baþta açýk mýydý kapalý mýydý?
+
+    private PlayerMovement playerMove;
+    private InteractionSystem interactionSys; // Raycast atmayý durdurmak için
 
     void Start()
     {
-        if (glitchPanel != null) glitchPanel.SetActive(false);
+        playerMove = FindFirstObjectByType<PlayerMovement>();
+        interactionSys = FindFirstObjectByType<InteractionSystem>();
     }
 
     void Update()
     {
-        if (!isInspecting) return;
-
-        // 1. Objeyi Mouse ile Döndür
-        float rotX = Input.GetAxis("Mouse X") * rotateSpeed;
-        float rotY = Input.GetAxis("Mouse Y") * rotateSpeed;
-
-        if (currentObject != null)
+        if (isInspecting && currentItem != null)
         {
-            // Hem saða sola hem yukarý aþaðý dönsün
-            currentObject.transform.Rotate(Vector3.up, -rotX, Space.World);
-            currentObject.transform.Rotate(Vector3.right, rotY, Space.World);
-        }
+            // Mouse ile döndürme (Kameranýn eksenlerine göre)
+            float x = Input.GetAxis("Mouse X") * rotateSpeed * Time.deltaTime;
+            float y = Input.GetAxis("Mouse Y") * rotateSpeed * Time.deltaTime;
 
-        // 2. Çýkýþ Yap (E veya ESC)
-        if (Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.Escape))
-        {
-            CloseInspect();
+            // DÝKKAT: Camera.main.transform kullanýyoruz ki bakýþ açýmýza göre dönsün
+            currentItem.transform.Rotate(Camera.main.transform.up, -x, Space.World);
+            currentItem.transform.Rotate(Camera.main.transform.right, y, Space.World);
+
+            // Çýkýþ
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.E))
+            {
+                DropItem();
+            }
         }
     }
 
-    public void StartInspect(GameObject prefabModel, bool isCursed)
+    public void Inspect(GameObject itemObj)
     {
+        if (isInspecting) return;
+
         isInspecting = true;
+        currentItem = itemObj;
 
-        // Oyuncuyu Dondur (Kafa dönmesin, sadece obje dönsün)
-        if (playerMovement != null) playerMovement.enabled = false;
-        if (mouseLook != null) mouseLook.enabled = false;
+        // 1. Eski konumunu kaydet
+        originalPos = itemObj.transform.position;
+        originalRot = itemObj.transform.rotation;
 
-        // Objeyi Yarat (InspectPoint konumunda)
-        if (currentObject != null) Destroy(currentObject);
-        currentObject = Instantiate(prefabModel, inspectPoint.position, inspectPoint.rotation, inspectPoint);
-
-        // Objenin üzerindeki colliderlarý kapat ki iç içe girmesin
-        Collider[] cols = currentObject.GetComponentsInChildren<Collider>();
-        foreach (Collider c in cols) c.enabled = false;
-
-        // LANETLÝ MÝ?
-        if (isCursed)
+        // 2. Fiziði (Yerçekimini) Kapat - ÇOK ÖNEMLÝ
+        itemRb = itemObj.GetComponent<Rigidbody>();
+        if (itemRb != null)
         {
-            StartCoroutine(GlitchEffect());
+            wasKinematic = itemRb.isKinematic;
+            itemRb.isKinematic = true; // Obje havada donsun, düþmesin
         }
+
+        // 3. Eþyayý kameranýn önüne taþý
+        if (inspectPoint != null)
+        {
+            currentItem.transform.position = inspectPoint.position;
+
+            // Ýstersen eþyayý ilk baþta kameraya düz baktýr (Opsiyonel)
+            // currentItem.transform.rotation = Quaternion.LookRotation(-Camera.main.transform.forward);
+        }
+
+        // 4. Oyuncuyu ve Etkileþimi dondur
+        if (playerMove != null) playerMove.enabled = false;
+        if (interactionSys != null) interactionSys.enabled = false; // Eþya elindeyken baþka þeye týklama
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = false; // Mouse imleci görünmesin ama dönsün
     }
 
-    public void CloseInspect()
+    public void DropItem()
     {
         isInspecting = false;
 
-        // Objeyi yok et
-        if (currentObject != null) Destroy(currentObject);
-
-        // Paneli kapat
-        if (glitchPanel != null) glitchPanel.SetActive(false);
-        StopAllCoroutines();
-
-        // Oyuncuyu Serbest Býrak
-        if (playerMovement != null) playerMovement.enabled = true;
-        if (mouseLook != null) mouseLook.enabled = true;
-    }
-
-    // Korku Efekti: Paneli rastgele açýp kapatýr
-    IEnumerator GlitchEffect()
-    {
-        while (isInspecting)
+        if (currentItem != null)
         {
-            glitchPanel.SetActive(true);
-            yield return new WaitForSeconds(Random.Range(0.05f, 0.2f)); // Çok kýsa bekle
-            glitchPanel.SetActive(false);
-            yield return new WaitForSeconds(Random.Range(0.1f, 0.8f)); // Biraz normal dursun
+            // 1. Eþyayý yerine koy
+            currentItem.transform.position = originalPos;
+            currentItem.transform.rotation = originalRot;
+
+            // 2. Fiziði eski haline getir
+            if (itemRb != null)
+            {
+                itemRb.isKinematic = wasKinematic;
+                itemRb = null;
+            }
+            currentItem = null;
         }
+
+        // 3. Oyuncuyu serbest býrak
+        if (playerMove != null) playerMove.enabled = true;
+        if (interactionSys != null) interactionSys.enabled = true;
+
+        Cursor.lockState = CursorLockMode.Locked;
     }
 }

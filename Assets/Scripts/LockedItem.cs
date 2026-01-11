@@ -1,65 +1,45 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public class LockedItem : MonoBehaviour
 {
-    public bool isLocked = true;
-
-    [Header("Ödül Ayarı")]
-    public GameObject rewardObject; // Dolap açılınca çıkacak eşya (Anahtar)
-
-    // Kod sistemi otomatik bulacak
-    private SkillCheckSystem skillCheckSystem;
-
-    void Start()
-    {
-        // Ödül objesi başta varsa, garanti olsun diye gizleyelim
-        if (rewardObject != null)
-        {
-            rewardObject.SetActive(false);
-        }
-
-        // OYUN BAŞLAYINCA SAHNEDEKİ SİSTEMİ ZORLA BUL
-        skillCheckSystem = FindObjectOfType<SkillCheckSystem>(true);
-
-        if (skillCheckSystem == null)
-        {
-            Debug.LogError("HATA: Sahnede 'SkillCheckSystem' scripti olan obje yok!");
-        }
-    }
+    [Header("Ã–dÃ¼l AyarÄ±")]
+    public GameObject hiddenRewardObject; // Sahnede gizli olan (tiki kapalÄ±) anahtarÄ± buraya sÃ¼rÃ¼kle!
 
     public void Interact()
     {
-        if (isLocked)
+        SkillCheckSystem system = FindFirstObjectByType<SkillCheckSystem>();
+
+        if (system != null)
         {
-            Debug.Log("Kilit zorlanıyor...");
-            if (skillCheckSystem != null)
-            {
-                skillCheckSystem.StartMinigame(OpenCabinet);
-            }
+            system.StartMinigame(OnMinigameSuccess);
         }
         else
         {
-            // Kilit açıksa sadece kapak animasyonu veya sesi çalar
-            Debug.Log("Dolap zaten açık.");
+            Debug.LogError("SkillCheckSystem bulunamadÄ±!");
         }
     }
 
-    void OpenCabinet()
+    private void OnMinigameSuccess()
     {
-        isLocked = false;
-        Debug.Log("Dolap açıldı! Anahtar ortaya çıktı.");
+        Unlock();
+    }
 
-        // Dolabın rengini değiştir (Görsel geri bildirim)
-        GetComponent<Renderer>().material.color = Color.green;
+    public void Unlock()
+    {
+        Debug.Log("ğŸ‰ KÄ°LÄ°T AÃ‡ILDI!");
 
-        // --- ANAHTARI ORTAYA ÇIKAR ---
-        if (rewardObject != null)
+        // 1. Gizli olan anahtarÄ± gÃ¶rÃ¼nÃ¼r yap
+        if (hiddenRewardObject != null)
         {
-            rewardObject.SetActive(true); // Gizli anahtarı görünür yap
+            hiddenRewardObject.SetActive(true); // Ä°ÅTE SÄ°HÄ°R BURADA!
+            Debug.Log("ğŸ—ï¸ Gizli anahtar ortaya Ã§Ä±ktÄ±!");
         }
         else
         {
-            Debug.LogWarning("UYARI: Dolabın içine 'Reward Object' (Anahtar) koymayı unuttun!");
+            Debug.LogWarning("âš ï¸ Kankam 'Hidden Reward Object' kutusunu boÅŸ bÄ±rakmÄ±ÅŸsÄ±n, neyi aÃ§acaÄŸÄ±mÄ± bilmiyorum!");
         }
+
+        // 2. Kilitli kutuyu yok et
+        Destroy(gameObject);
     }
 }
