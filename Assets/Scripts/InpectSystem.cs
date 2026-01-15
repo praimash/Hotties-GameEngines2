@@ -3,40 +3,55 @@ using UnityEngine;
 public class InspectSystem : MonoBehaviour
 {
     [Header("Ayarlar")]
-    public Transform inspectPoint; // Kameranýn içindeki o X=0, Y=0, Z=0.5 olan nokta
-    public float rotateSpeed = 200f; // Hýzý biraz düþürdüm, daha kontrollü olsun
+    public float rotateSpeed = 200f;
+
+    [Header("Görünüm Ayarý")]
+    [Range(0.01f, 1f)]
+    public float viewScale = 0.2f; // <-- Varsayýlaný iyice küçülttüm
+
+    [Header("Referanslar (Sürükle!)")]
+    public PlayerMovement playerMove;
+    public CharacterController playerController;
+    public InteractionSystem interactionSys;
+
+    public Camera mainCam;
 
     private GameObject currentItem;
     private Vector3 originalPos;
     private Quaternion originalRot;
+    private Vector3 originalScale;
     private bool isInspecting = false;
-
-    // Fiziði yönetmek için
+    private Collider[] itemColliders;
     private Rigidbody itemRb;
-    private bool wasKinematic; // Eþyanýn fiziði baþta açýk mýydý kapalý mýydý?
-
-    private PlayerMovement playerMove;
-    private InteractionSystem interactionSys; // Raycast atmayý durdurmak için
+    private bool wasKinematic;
 
     void Start()
     {
-        playerMove = FindFirstObjectByType<PlayerMovement>();
-        interactionSys = FindFirstObjectByType<InteractionSystem>();
+        if (mainCam == null) mainCam = Camera.main;
+
+        // Otomatik bulmayalým, sen elle sürükle (En garantisi)
+        if (playerMove == null) playerMove = FindFirstObjectByType<PlayerMovement>();
+        if (interactionSys == null) interactionSys = FindFirstObjectByType<InteractionSystem>();
+        if (playerController == null) playerController = FindFirstObjectByType<CharacterController>();
     }
 
     void Update()
     {
         if (isInspecting && currentItem != null)
         {
-            // Mouse ile döndürme (Kameranýn eksenlerine göre)
+            // Eþyayý sürekli kameranýn önünde tut (Hareket etsek bile)
+            // BURASI KRÝTÝK: Kameranýn pozisyonu + (Kameranýn baktýðý yön * 1.5 metre)
+            Vector3 targetPos = mainCam.transform.position + (mainCam.transform.forward * 1.5f);
+            currentItem.transform.position = targetPos;
+
+            // Döndürme
             float x = Input.GetAxis("Mouse X") * rotateSpeed * Time.deltaTime;
             float y = Input.GetAxis("Mouse Y") * rotateSpeed * Time.deltaTime;
 
-            // DÝKKAT: Camera.main.transform kullanýyoruz ki bakýþ açýmýza göre dönsün
-            currentItem.transform.Rotate(Camera.main.transform.up, -x, Space.World);
-            currentItem.transform.Rotate(Camera.main.transform.right, y, Space.World);
+            // Kameraya göre döndür
+            currentItem.transform.Rotate(mainCam.transform.up, -x, Space.World);
+            currentItem.transform.Rotate(mainCam.transform.right, y, Space.World);
 
-            // Çýkýþ
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.E))
             {
                 DropItem();
@@ -47,37 +62,38 @@ public class InspectSystem : MonoBehaviour
     public void Inspect(GameObject itemObj)
     {
         if (isInspecting) return;
-
         isInspecting = true;
         currentItem = itemObj;
 
-        // 1. Eski konumunu kaydet
+        // Eski bilgileri kaydet
         originalPos = itemObj.transform.position;
         originalRot = itemObj.transform.rotation;
+        originalScale = itemObj.transform.localScale;
 
-        // 2. Fiziði (Yerçekimini) Kapat - ÇOK ÖNEMLÝ
+        // 1. Collider ve Fizik Kapat
+        itemColliders = itemObj.GetComponentsInChildren<Collider>();
+        foreach (Collider col in itemColliders) col.enabled = false;
+
         itemRb = itemObj.GetComponent<Rigidbody>();
-        if (itemRb != null)
-        {
-            wasKinematic = itemRb.isKinematic;
-            itemRb.isKinematic = true; // Obje havada donsun, düþmesin
-        }
+        if (itemRb != null) { wasKinematic = itemRb.isKinematic; itemRb.isKinematic = true; }
 
-        // 3. Eþyayý kameranýn önüne taþý
-        if (inspectPoint != null)
-        {
-            currentItem.transform.position = inspectPoint.position;
+        // 2. POZÝSYONLAMA (Matematiksel)
+        // Kameranýn 1.5 metre önüne ýþýnla
+        currentItem.transform.position = mainCam.transform.position + (mainCam.transform.forward * 1.5f);
 
-            // Ýstersen eþyayý ilk baþta kameraya düz baktýr (Opsiyonel)
-            // currentItem.transform.rotation = Quaternion.LookRotation(-Camera.main.transform.forward);
-        }
+        // Yüzünü kameraya dön
+        currentItem.transform.LookAt(mainCam.transform);
 
-        // 4. Oyuncuyu ve Etkileþimi dondur
+        // Boyutunu ayarla
+        currentItem.transform.localScale = originalScale * viewScale;
+
+        // 3. OYUNCUYU KAPAT
         if (playerMove != null) playerMove.enabled = false;
-        if (interactionSys != null) interactionSys.enabled = false; // Eþya elindeyken baþka þeye týklama
+        if (interactionSys != null) interactionSys.enabled = false;
+        if (playerController != null) playerController.enabled = false;
 
         Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = false; // Mouse imleci görünmesin ama dönsün
+        Cursor.visible = false;
     }
 
     public void DropItem()
@@ -86,20 +102,23 @@ public class InspectSystem : MonoBehaviour
 
         if (currentItem != null)
         {
-            // 1. Eþyayý yerine koy
+            // Eski yerine koy
             currentItem.transform.position = originalPos;
             currentItem.transform.rotation = originalRot;
+            currentItem.transform.localScale = originalScale;
 
-            // 2. Fiziði eski haline getir
-            if (itemRb != null)
+            if (itemRb != null) { itemRb.isKinematic = wasKinematic; itemRb = null; }
+
+            if (itemColliders != null)
             {
-                itemRb.isKinematic = wasKinematic;
-                itemRb = null;
+                foreach (Collider col in itemColliders) { if (col != null) col.enabled = true; }
+                itemColliders = null;
             }
             currentItem = null;
         }
 
-        // 3. Oyuncuyu serbest býrak
+        // Oyuncuyu aç
+        if (playerController != null) playerController.enabled = true;
         if (playerMove != null) playerMove.enabled = true;
         if (interactionSys != null) interactionSys.enabled = true;
 

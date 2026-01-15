@@ -1,14 +1,19 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections;
 
 public class HidingSpot : MonoBehaviour
 {
-    [Header("Ayarlar")]
-    public Transform exitPoint;
+    [Header("Nokta AyarlarÄ±")]
+    public Transform exitPoint; // Ã‡Ä±kÄ±nca nerede doÄŸsun?
+    public Transform hidePoint; // Ä°Ã‡ERÄ°DEYKEN nerede durup nereye baksÄ±n? (BOÅž BIRAKIRSAN YATAÄžI BAZ ALIR)
+
+    [Header("DiÄŸer Ayarlar")]
     public KeyCode exitKey = KeyCode.E;
+    public float exitOffset = 1.5f;
 
     private bool isInside = false;
-    private bool canExit = true; // Hemen çýkmayý önleyen kilit
+    private bool canExit = true;
+    private float lastInteractionTime;
 
     private GameObject player;
     private PlayerMovement playerMovement;
@@ -16,7 +21,6 @@ public class HidingSpot : MonoBehaviour
 
     void Update()
     {
-        // Sadece içerideysek, çýkýþ izni varsa ve E'ye basýldýysa
         if (isInside && canExit && Input.GetKeyDown(exitKey))
         {
             ExitHiding();
@@ -25,6 +29,8 @@ public class HidingSpot : MonoBehaviour
 
     public void Interact()
     {
+        if (Time.time < lastInteractionTime + 0.5f) return;
+
         if (player == null) FindPlayer();
 
         if (!isInside)
@@ -36,44 +42,77 @@ public class HidingSpot : MonoBehaviour
     void HidePlayer()
     {
         isInside = true;
-        canExit = false; // Kilidi kapat, hemen çýkamasýn
+        canExit = false;
         PlayerStatus.isHidden = true;
+        lastInteractionTime = Time.time;
 
         if (player != null)
         {
-            // Oyuncuyu dolabýn içine al
-            player.transform.position = transform.position;
-            player.transform.rotation = transform.rotation;
+            // --- YENÄ° EKLENEN KISIM: HIDE POINT ---
+            if (hidePoint != null)
+            {
+                // EÄŸer Ã¶zel nokta belirlediysen oraya git ve ORANIN BAKTIÄžI YERE bak
+                player.transform.position = hidePoint.position;
+                player.transform.rotation = hidePoint.rotation;
+            }
+            else
+            {
+                // Belirlemediysen eskisi gibi objenin merkezine git
+                player.transform.position = transform.position;
 
-            // Hareketi ve Fiziði Kapat (PlayerMovement scriptini bulup kapatýyoruz)
+                // Sadece Y yÃ¶nÃ¼nÃ¼ al (Dik dur)
+                Vector3 targetRot = transform.eulerAngles;
+                player.transform.rotation = Quaternion.Euler(0, targetRot.y, 0);
+            }
+            // --------------------------------------
+
             if (playerMovement != null) playerMovement.enabled = false;
             if (playerCollider != null) playerCollider.enabled = false;
         }
 
-        // 1 Saniye sonra çýkýþa izin ver (Girdi-Çýktý bugýný önler)
         StartCoroutine(EnableExitCooldown());
-
-        Debug.Log("Dolaba girdin.");
+        Debug.Log("SaklandÄ±n.");
     }
 
     void ExitHiding()
     {
         isInside = false;
         PlayerStatus.isHidden = false;
+        lastInteractionTime = Time.time;
 
-        if (exitPoint != null && player != null)
-            player.transform.position = exitPoint.position;
+        if (player != null)
+        {
+            if (exitPoint != null)
+            {
+                player.transform.position = exitPoint.position;
+            }
+            else
+            {
+                Vector3 autoExitPos = transform.position + (transform.forward * exitOffset);
+                player.transform.position = autoExitPos;
+            }
 
-        // Hareketi Geri Aç
+            // Ã‡Ä±karken dik dur ve karÅŸÄ±ya bak
+            Vector3 currentRot = player.transform.eulerAngles;
+            player.transform.rotation = Quaternion.Euler(0, currentRot.y, 0);
+
+            Camera cam = player.GetComponentInChildren<Camera>();
+            if (cam != null)
+            {
+                // KafayÄ± dÃ¼zelt (isteÄŸe baÄŸlÄ±)
+                // cam.transform.localRotation = Quaternion.identity; 
+            }
+        }
+
         if (playerMovement != null) playerMovement.enabled = true;
         if (playerCollider != null) playerCollider.enabled = true;
 
-        Debug.Log("Dolaptan çýktýn.");
+        Debug.Log("Ã‡Ä±ktÄ±n.");
     }
 
     IEnumerator EnableExitCooldown()
     {
-        yield return new WaitForSeconds(0.5f); // Yarým saniye bekle
+        yield return new WaitForSeconds(0.5f);
         canExit = true;
     }
 

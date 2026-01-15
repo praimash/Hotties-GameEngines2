@@ -1,104 +1,185 @@
 ﻿using UnityEngine;
-using UnityEngine.SceneManagement; // Sahneyi resetlemek için
+using UnityEngine.AI;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI; // Image kontrolü için şart
+using TMPro;          // TextMeshPro için şart
+using System.Collections.Generic;
 
-public class StalkerEnemy : MonoBehaviour
+public class SmartEnemyAI : MonoBehaviour
 {
+    [Header("UI & Efektler")]
+    public TextMeshProUGUI countdownText; // Geri sayım yazısı
+    public Image glitchImage;             // Glitch/Karıncalı ekran resmi
+
+    [Header("Hareket Ayarları")]
+    public float walkSpeed = 2f;
+    public float runSpeed = 4f;
+    public List<Transform> waypoints;
+
     [Header("Görüş Ayarları")]
-    public float viewDistance = 15f; // Ne kadar uzağı görebilir?
-    public float viewAngle = 60f;    // Görüş açısı (Gözleri ensesinde olmasın)
-    public LayerMask obstacleMask;   // Duvarların layerı (Default olsun genelde)
+    public float viewDistance = 15f;
+    [Range(0, 360)]
+    public float viewAngle = 110f;
+    public LayerMask obstacleMask;
+    public Transform eyes;
 
     [Header("Ölüm Ayarları")]
-    public float killTime = 5f; // Bizi görünce kaç saniye sonra öldürsün?
+    public float killTime = 5f;
+    public float killDistance = 1.5f; // Temas mesafesi
 
+    private NavMeshAgent agent;
     private Transform player;
     private float killTimer;
-    private bool isHunting = false; // Şu an bizi kovalıyor mu?
+    private bool isChasing = false;
 
     void Start()
     {
-        player = GameObject.FindGameObjectWithTag("Player").transform;
+        agent = GetComponent<NavMeshAgent>();
+        agent.speed = walkSpeed;
         killTimer = killTime;
+
+        // Oyuncuyu bul (Hata vermemesi için kontrol ekledim)
+        GameObject pObj = GameObject.FindGameObjectWithTag("Player");
+        if (pObj != null) player = pObj.transform;
+
+        // Başlarken UI'ları gizle
+        if (countdownText != null) countdownText.gameObject.SetActive(false);
+        ResetGlitchEffect(); // Efekti sıfırla
+
+        GoToNextPoint();
     }
 
     void Update()
     {
-        // 1. Oyuncu Saklanıyor mu?
+        // 1. OYUNCU DOLAPTA MI?
         if (PlayerStatus.isHidden)
         {
-            // Saklanıyorsa bizi göremez, sayacı sıfırla
-            isHunting = false;
-            killTimer = killTime;
+            StopChasing();
             return;
         }
 
-        // 2. Oyuncuyu Görüyor muyuz?
+        // 2. TEMAS İLE ÖLDÜRME (Anında)
+        if (player != null)
+        {
+            float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+            if (distanceToPlayer <= killDistance) KillPlayer();
+        }
+
+        // 3. GÖRÜŞ KONTROLÜ
         if (CanSeePlayer())
         {
-            isHunting = true;
-            killTimer -= Time.deltaTime; // Süreyi azalt
+            isChasing = true;
+            agent.speed = runSpeed;
+            agent.isStopped = false;
+            agent.SetDestination(player.position);
 
-            Debug.LogWarning("DÜŞMAN SENİ GÖRDÜ! Kalan Süre: " + (int)killTimer);
+            // --- SAYAÇ VE GLITCH ---
+            killTimer -= Time.deltaTime;
 
-            if (killTimer <= 0)
+            // A) Geri Sayım Yazısı
+            if (countdownText != null)
             {
-                KillPlayer();
+                countdownText.gameObject.SetActive(true);
+                countdownText.text = killTimer.ToString("F1");
             }
+
+            // B) Glitch Efekti (Kodla Animasyon) ⚡
+            if (glitchImage != null)
+            {
+                // Süre azaldıkça intensity (şiddet) 0'dan 1'e çıkar
+                float intensity = 1 - (killTimer / killTime);
+                if (intensity < 0) intensity = 0;
+
+                // 1. Yanıp Sönme (Alpha Titremesi)
+                Color c = glitchImage.color;
+                // Şiddet arttıkça daha görünür olur, ama rastgele titrer
+                c.a = Random.Range(intensity * 0.5f, intensity);
+                glitchImage.color = c;
+
+                // 2. Pozisyon Kayması (Shake)
+                // Şiddet arttıkça ekran daha çok sallanır (Max 50 piksel)
+                float shakePower = intensity * 50f;
+                glitchImage.rectTransform.anchoredPosition = Random.insideUnitCircle * shakePower;
+            }
+            // -----------------------
+
+            if (killTimer <= 0) KillPlayer();
         }
         else
         {
-            // Gözden kaybolursak hemen pes etmesin, yavaşça dolsun (Opsiyonel)
-            isHunting = false;
-            killTimer = killTime; // Şimdilik direkt resetliyoruz
+            // Görmüyorsa
+            if (isChasing) StopChasing();
+
+            if (!agent.pathPending && agent.remainingDistance < 0.5f)
+            {
+                GoToNextPoint();
+            }
+        }
+    }
+
+    void StopChasing()
+    {
+        isChasing = false;
+        agent.speed = walkSpeed;
+        killTimer = killTime;
+
+        if (countdownText != null) countdownText.gameObject.SetActive(false);
+        ResetGlitchEffect();
+
+        if (agent.remainingDistance < 0.5f) GoToNextPoint();
+    }
+
+    void ResetGlitchEffect()
+    {
+        if (glitchImage != null)
+        {
+            // Rengi tamamen şeffaf yap
+            Color c = glitchImage.color;
+            c.a = 0f;
+            glitchImage.color = c;
+
+            // Kaymış pozisyonu merkeze al
+            glitchImage.rectTransform.anchoredPosition = Vector2.zero;
         }
     }
 
     bool CanSeePlayer()
     {
         if (player == null) return false;
-
+        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+        if (distanceToPlayer > viewDistance) return false;
         Vector3 dirToPlayer = (player.position - transform.position).normalized;
-        float dstToPlayer = Vector3.Distance(transform.position, player.position);
-
-        // 1. Mesafe kontrolü
-        if (dstToPlayer > viewDistance) return false;
-
-        // 2. Açı kontrolü (Önünde mi?)
         if (Vector3.Angle(transform.forward, dirToPlayer) > viewAngle / 2) return false;
 
-        // 3. Duvar kontrolü (Arada duvar var mı?)
-        // Raycast atıyoruz: Bize çarpıyorsa sorun yok, duvara çarpıyorsa göremez.
-        if (!Physics.Raycast(transform.position, dirToPlayer, dstToPlayer, obstacleMask))
+        RaycastHit hit;
+        if (Physics.Raycast(eyes.position, dirToPlayer, out hit, distanceToPlayer))
         {
-            return true; // Engel yok, görüyorum!
+            if (hit.transform.CompareTag("Player") || hit.transform == player) return true;
+            else return false;
         }
-
         return false;
     }
 
     void KillPlayer()
     {
-        Debug.Log("💀 ÖLDÜN!");
-        // Sahneyi yeniden başlat (Ölüm ekranı vs. sonra eklersin)
+        Debug.Log("💀 SİNYAL KOPTU - ÖLDÜN!");
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // Editörde görüş alanını çizelim (Görmek için)
-    void OnDrawGizmosSelected()
+    // --- BURAYI DÜZELTTİM (Artık sadece bir tane var) ---
+    void GoToNextPoint()
     {
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, viewDistance);
-
-        Vector3 viewAngleA = DirFromAngle(-viewAngle / 2, false);
-        Vector3 viewAngleB = DirFromAngle(viewAngle / 2, false);
-
-        Gizmos.DrawLine(transform.position, transform.position + viewAngleA * viewDistance);
-        Gizmos.DrawLine(transform.position, transform.position + viewAngleB * viewDistance);
+        if (waypoints.Count == 0) return;
+        int randomIndex = Random.Range(0, waypoints.Count);
+        agent.destination = waypoints[randomIndex].position;
     }
 
-    Vector3 DirFromAngle(float angleInDegrees, bool angleIsGlobal)
+    // Gizmo Çizimi
+    void OnDrawGizmosSelected()
     {
-        if (!angleIsGlobal) angleInDegrees += transform.eulerAngles.y;
-        return new Vector3(Mathf.Sin(angleInDegrees * Mathf.Deg2Rad), 0, Mathf.Cos(angleInDegrees * Mathf.Deg2Rad));
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, viewDistance);
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, killDistance);
     }
 }

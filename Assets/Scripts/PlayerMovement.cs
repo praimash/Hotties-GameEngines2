@@ -2,42 +2,74 @@ using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
-    public float speed = 10f;
-    public float mouseSensitivity = 2f; // Raw kullanýnca bunu biraz düþürmen gerekebilir (örn: 2-3 gibi)
+    [Header("Hareket Ayarlarý")]
+    public float speed = 12f;
+    public float gravity = -19.62f; // Yerçekimi gücü
+    public float jumpHeight = 3f;
 
-    [Header("Sürükle Býrak")]
-    public Transform playerCamera; // Player'ýn içindeki Main Camera'yý buraya sürükle
+    [Header("Zemin Kontrolü")]
+    public Transform groundCheck; // Ayaklarýnýn altýndaki boþ obje
+    public float groundDistance = 0.4f; // Yere ne kadar yakýnsa "yerde" sayýlsýn?
+    public LayerMask groundMask; // Hangi layer zemin?
+
+    [Header("Referanslar")]
     public CharacterController controller;
+    public Transform playerCamera;
+    public float mouseSensitivity = 100f;
 
     private float xRotation = 0f;
+    private Vector3 velocity;
+    private bool isGrounded;
 
     void Start()
     {
+        // Mouse'u kilitle ve gizle
         Cursor.lockState = CursorLockMode.Locked;
-        // FPS'i kodla da zorla sabitleyelim (VSync yetmezse diye)
-        Application.targetFrameRate = 60;
+
+        // Eðer controller atanmamýþsa otomatik bul
+        if (controller == null) controller = GetComponent<CharacterController>();
     }
 
     void Update()
     {
-        // 1. MOUSE (Raw kullanýyoruz AMA Time.deltaTime ekledik ki uçmasýn)
-        // Sensitivity ayarýný inspector'dan tekrar 100-200 gibi eski haline getirebilirsin.
-        float mouseX = Input.GetAxisRaw("Mouse X") * mouseSensitivity * Time.deltaTime;
-        float mouseY = Input.GetAxisRaw("Mouse Y") * mouseSensitivity * Time.deltaTime;
+        // 1. ZEMÝN KONTROLÜ (Yerçekimini sýfýrlamak için)
+        if (groundCheck != null)
+        {
+            isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+        }
+
+        if (isGrounded && velocity.y < 0)
+        {
+            velocity.y = -2f; // Yerdeyken aþaðý çekmeye zorlama, hafif bastýr
+        }
+
+        // 2. MOUSE HAREKETÝ (Kamera Dönüþü)
+        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
+        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
 
-        playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        if (playerCamera != null)
+            playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+
         transform.Rotate(Vector3.up * mouseX);
 
-        // 2. YÜRÜME
-        float x = Input.GetAxisRaw("Horizontal");
-        float z = Input.GetAxisRaw("Vertical");
+        // 3. YÜRÜME
+        float x = Input.GetAxis("Horizontal");
+        float z = Input.GetAxis("Vertical");
 
         Vector3 move = transform.right * x + transform.forward * z;
+        controller.Move(move * speed * Time.deltaTime);
 
-        // Burasý zaten doðruydu
-        controller.Move(move.normalized * speed * Time.deltaTime);
+        // 4. ZIPLAMA
+        if (Input.GetButtonDown("Jump") && isGrounded)
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
+
+        // 5. YERÇEKÝMÝ UYGULA
+        velocity.y += gravity * Time.deltaTime;
+        controller.Move(velocity * Time.deltaTime);
     }
 }
