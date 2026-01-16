@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections.Generic; // Listeler için gerekli
 
 public class InteractionSystem : MonoBehaviour
 {
@@ -7,12 +8,12 @@ public class InteractionSystem : MonoBehaviour
     public LayerMask interactionLayer;
     public Camera cam;
 
-    [Header("Diğer Eşyalar (Itemlar)")]
+    [Header("Normal Eşyalar (Sadece Büyüme)")]
     public float hoverScaleAmount = 1.1f;
     public float smoothSpeed = 10f;
 
-    [Header("Saklanma Yerleri (Renk Değişimi)")]
-    public Color highlightColor = Color.gray; // Üzerine gelince hangi renk olsun?
+    [Header("Saklanma Yerleri (Sadece Renk)")]
+    public Color highlightColor = Color.gray;
 
     // --- HAFIZA (Büyüme İçin) ---
     private Transform currentHoverObject;
@@ -20,13 +21,13 @@ public class InteractionSystem : MonoBehaviour
     private Vector3 currentOriginalScale;
     private Vector3 lastOriginalScale;
 
-    // --- HAFIZA (Renk İçin) ---
-    private Renderer currentRenderer;     // Şu an rengini değiştirdiğimiz obje
-    private Color originalColor;          // Objenin gerçek rengi
+    // --- HAFIZA (Renk İçin - ARTIK LİSTE KULLANIYORUZ) ---
+    private HidingSpot currentHidingSpot; // Şu an baktığımız saklanma yeri
+    private List<Renderer> currentRenderers = new List<Renderer>(); // Boyadığımız tüm parçalar
+    private List<Color> originalColors = new List<Color>(); // O parçaların eski renkleri
 
     void Update()
     {
-        // Eğer saklanıyorsak raycast atıp sistemi yormayalım
         if (PlayerStatus.isHidden) return;
 
         ShootRayAndHover();
@@ -42,51 +43,48 @@ public class InteractionSystem : MonoBehaviour
         {
             Transform hitTransform = hit.transform;
 
-            // -----------------------------------------------------------
-            // 1. ÖNCEKİ RENKLENDİRMEYİ TEMİZLE (Başka objeye geçtiysek)
-            // -----------------------------------------------------------
-            if (currentRenderer != null && hitTransform != currentRenderer.transform)
-            {
-                currentRenderer.material.color = originalColor; // Eski rengine dön
-                currentRenderer = null;
-            }
+            // --- TÜR KONTROLÜ ---
 
-            // -----------------------------------------------------------
-            // 2. TÜR KONTROLÜ: BU NE? (Kapı mı, Saklanma yeri mi, Eşya mı?)
-            // -----------------------------------------------------------
+            SimpleDoor door = hit.collider.GetComponent<SimpleDoor>();
+            if (door == null) door = hit.collider.GetComponentInParent<SimpleDoor>();
 
-            // A) SAKLANMA YERİ Mİ? (Renk Değişsin)
             HidingSpot hidingSpot = hit.collider.GetComponent<HidingSpot>();
             if (hidingSpot == null) hidingSpot = hit.collider.GetComponentInParent<HidingSpot>();
 
-            if (hidingSpot != null)
-            {
-                // Büyümeyi İptal Et (Eğer önceden büyüyen bir şeye bakıyorsak küçülsün)
-                ResetHoverScale();
-
-                // Renk Değiştirme Mantığı
-                Renderer rend = hit.collider.GetComponent<Renderer>();
-                if (rend == null) rend = hit.collider.GetComponentInChildren<Renderer>(); // Kendisinde yoksa çocuğuna bak (Yatak vb.)
-
-                if (rend != null && currentRenderer != rend)
-                {
-                    currentRenderer = rend;
-                    originalColor = rend.material.color; // Orijinal rengi kaydet
-                    currentRenderer.material.color = highlightColor; // Yeni rengi ver
-                }
-            }
-            // B) KAPI MI? (Hiçbir görsel efekt olmasın)
-            else if (hit.collider.GetComponent<SimpleDoor>() != null || hit.collider.GetComponentInParent<SimpleDoor>() != null)
+            // 1. KAPI MI? -> HİÇBİR ŞEY YAPMA 🚪
+            if (door != null)
             {
                 ResetHoverScale();
                 ResetColor();
             }
-            // C) NORMAL EŞYA MI? (Büyüsün)
+            // 2. SAKLANMA YERİ Mİ? -> TÜM PARÇALARI BOYA 🎨
+            else if (hidingSpot != null)
+            {
+                ResetHoverScale(); // Büyümeyi iptal et
+
+                // Eğer yeni bir saklanma yerine bakıyorsak işlemleri başlat
+                if (currentHidingSpot != hidingSpot)
+                {
+                    ResetColor(); // Önceki boyadıklarımızı temizle
+
+                    currentHidingSpot = hidingSpot; // Yeni hedefi kaydet
+
+                    // HidingSpot scriptinin olduğu objenin altındaki TÜM Render'ları bul
+                    Renderer[] allRenderers = hidingSpot.GetComponentsInChildren<Renderer>();
+
+                    foreach (Renderer rend in allRenderers)
+                    {
+                        currentRenderers.Add(rend);
+                        originalColors.Add(rend.material.color); // Orijinal rengi sakla
+                        rend.material.color = highlightColor;    // Yeni rengi bas
+                    }
+                }
+            }
+            // 3. NORMAL EŞYA MI? -> SADECE BÜYÜME (SCALE) 🔍
             else
             {
-                ResetColor(); // Renk varsa temizle
+                ResetColor(); // Renkleri temizle
 
-                // Yeni bir objeye bakıyorsak büyüme listesine al
                 if (currentHoverObject != hitTransform)
                 {
                     if (currentHoverObject != null)
@@ -99,28 +97,17 @@ public class InteractionSystem : MonoBehaviour
                 }
             }
 
-            // -----------------------------------------------------------
-            // 3. TIKLAMA (INTERACT) İŞLEMLERİ
-            // -----------------------------------------------------------
+            // --- TIKLAMA (E TUŞU) ---
             if (Input.GetKeyDown(KeyCode.E))
             {
-                // Tıklayınca görsel efektleri sıfırla
                 if (currentHoverObject != null) currentHoverObject.localScale = currentOriginalScale;
                 ResetColor();
 
-                // SAKLANMA YERİ
                 if (hidingSpot != null) { hidingSpot.Interact(); return; }
+                if (door != null) { door.Interact(); return; }
 
-                // KAPI
-                SimpleDoor simpleDoor = hit.collider.GetComponent<SimpleDoor>();
-                if (simpleDoor == null) simpleDoor = hit.collider.GetComponentInParent<SimpleDoor>();
-                if (simpleDoor != null) { simpleDoor.Interact(); return; }
-
-                // DİĞERLERİ
                 InspectableItem inspectItem = hit.collider.GetComponent<InspectableItem>();
                 if (inspectItem != null) { inspectItem.Interact(); return; }
-
-                // ... Buraya diğer item kodlarını (LockedDoor vb.) ekleyebilirsin ...
             }
         }
         else
@@ -130,8 +117,6 @@ public class InteractionSystem : MonoBehaviour
             ResetColor();
         }
     }
-
-    // --- YARDIMCI FONKSİYONLAR ---
 
     void HandleScaling()
     {
@@ -161,12 +146,24 @@ public class InteractionSystem : MonoBehaviour
         }
     }
 
+    // --- YENİ RENK SIFIRLAMA SİSTEMİ (LİSTE İÇİN) ---
     void ResetColor()
     {
-        if (currentRenderer != null)
+        // Listede kayıtlı tüm parçaları eski rengine döndür
+        if (currentRenderers.Count > 0)
         {
-            currentRenderer.material.color = originalColor;
-            currentRenderer = null;
+            for (int i = 0; i < currentRenderers.Count; i++)
+            {
+                if (currentRenderers[i] != null) // Obje yok olmadıysa
+                {
+                    currentRenderers[i].material.color = originalColors[i];
+                }
+            }
+
+            // Listeleri temizle ki bir sonraki işlem için boşalsın
+            currentRenderers.Clear();
+            originalColors.Clear();
+            currentHidingSpot = null;
         }
     }
 }
